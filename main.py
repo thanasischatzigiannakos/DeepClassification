@@ -14,7 +14,7 @@ from keras.layers import Dense, Activation, Embedding, Flatten, GlobalMaxPool1D,
 from keras.callbacks import ReduceLROnPlateau, EarlyStopping, ModelCheckpoint
 from keras.losses import binary_crossentropy
 from keras.optimizers import Adam
-from sklearn.preprocessing import MultiLabelBinarizer
+from sklearn.preprocessing import MultiLabelBinarizer , LabelBinarizer
 from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.model_selection import train_test_split
 from sklearn.linear_model import LogisticRegression
@@ -27,6 +27,7 @@ import pickle
 import logging
 logging.basicConfig(format='%(asctime)s : %(levelname)s : %(message)s', level=logging.INFO)
 plt.style.use('ggplot')
+
 count_edu = 0
 count_game = 0
 count_an = 0
@@ -55,7 +56,7 @@ def plot_history(history):
     plt.legend()
     plt.show()
 
-num_classes = 27
+
 snowball = SnowballStemmer(language='english')
 lemmatizer = WordNetLemmatizer()
 pd.set_option('display.max_columns', None)
@@ -92,7 +93,8 @@ for x in range (0, df.shape[0]):
 
 counted = [count_edu,count_game , count_an , count_sec, count_fin , count_crm , count_coms]
 print(counted)
-"""
+#PLOT SHOWING THE TIMES EACH CATEGORY APPEARS IN THE DATASET
+
 fig = plt.figure(figsize=(10, 10))
 for x in range(0,6):
     plt.bar(categories[x],counted[x])                   
@@ -100,36 +102,32 @@ plt.ylabel('Number of instances in dataset')
 plt.xlabel('Categories in dataset')
 plt.legend(labels=['Education', 'Game Development' ,'Analytics', 'Security', 'Finance' , 'CRM' , 'Communications'])
 plt.show()
-"""
-multilabel_binarizer = MultiLabelBinarizer()
-multilabel_binarizer.fit(df['Category'])
-labels = multilabel_binarizer.classes
+
+# CREATING THE LABEL BINARIZER
+label_binarizer = LabelBinarizer()
+label_binarizer.fit(df['Category'])
 maxlen = 500
 max_words = 5000
 tokenizer = Tokenizer(num_words=max_words, lower=True)
 tokenizer.fit_on_texts(df['ReadMe'])
 
-
+#FUNCTION TO TRANSORM THE README FILES
 def get_features(text_series):
     sequences = tokenizer.texts_to_sequences(text_series)
     return pad_sequences(sequences,maxlen =maxlen)
-
-def prediction_to_label(prediction):
-    tag_prob = [(labels[i], prob) for i , prob in enumerate(prediction.tolist())]
-    return dict(sorted(tag_prob, key=lambda kv:kv[1] , reverse=True))
-
 x = get_features(df['ReadMe'])
-y = multilabel_binarizer.transform(df['Category'])
+y = label_binarizer.transform(df['Category'])
 print(x.shape)
-
+#SPLITTING OUR DATASET INTO TRAINING AND TESTING
 x_train, x_test, y_train, y_test = train_test_split(x, y, test_size=0.2, random_state=9000)
 
 filter_length = 500
-
+num_classes = 8
+#CREATING OUR MODEL
 model = Sequential()
 model.add(Embedding(max_words, 20, input_length=maxlen))
 model.add(Dropout(0.1))
-model.add(Conv1D(filter_length, 3, padding='valid', activation='relu', strides=1))
+model.add(Conv1D(filter_length, 3, padding='same', activation='relu', strides=1))
 model.add(GlobalMaxPool1D())
 model.add(Dense(num_classes))
 model.add(Activation('sigmoid'))
@@ -137,24 +135,26 @@ model.compile(optimizer='adam', loss='binary_crossentropy', metrics=['accuracy']
 model.summary()
 callbacks = [
     ReduceLROnPlateau(),
-    EarlyStopping(patience=4),
+    EarlyStopping(patience=4),     #STOPPING THE TRAINING IF LOSS STOPS DECREASING
     ModelCheckpoint(filepath='model-conv1d.h5', save_best_only=True)
 ]
 logging.info("Keras model training started...")
-history = model.fit(x_train, y_train,epochs=20, batch_size=32, validation_split=0.1, callbacks=callbacks)
+history = model.fit(x_train, y_train,epochs=40, batch_size=32, validation_split=0.1, callbacks=callbacks) #TRAINING OUR MODEL
 logging.info("Evaluating the models accuracy...")
 cnn_model = keras.models.load_model('model-conv1d.h5')
 metrics = cnn_model.evaluate(x_test, y_test)
 print("{}: {}".format(model.metrics_names[0], metrics[0]))
 print("{}: {}".format(model.metrics_names[1], metrics[1]))
 plot_history(history)
-
+"""
+tokenizer = Tokenizer(num_words=500, lower=True)
 test_features = input("Enter description:")
 #test_features = tokenizer.fit_on_texts(test_features)
 model = tf.keras.models.load_model("model-conv1d.h5")
-prediction = model.predict_classes(tf.convert_to_tensor(np.array(tokenizer.texts_to_sequences(test_features))),dtype=tf.float32)
+sequences = tokenizer.texts_to_sequences(test_features)
+print(sequences)
+prediction = np.array(model.predict([test_features]),dtype='float32')
 classes = ["Education","Game Development","Analytics","Security","Finance","CRM","Lul" ]
 #print(classes[int(prediction[0][0])])
 print(prediction)
-
-
+"""
